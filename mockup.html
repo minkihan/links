@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Links</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #1a1a1a;
+    --surface: #242424;
+    --surface-2: #2c2c2c;
+    --border: #383838;
+    --border-hover: #4a4a4a;
+    --text: #e0e0e0;
+    --text-dim: #999;
+    --text-muted: #666;
+    --accent: #fbbf24;
+    --link: #7eb8ff;
+    --link-hover: #a0d0ff;
+    --danger: #f85149;
+    --green: #2d9a46;
+    --green-hover: #3aad57;
+    --input-bg: #1e1e1e;
+  }
+
+  body {
+    font-family: 'D2CodingLigature Nerd Font', 'D2CodingLigature Nerd Font Propo', monospace;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ─── Top bar ─── */
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex; align-items: center; gap: 16px; justify-content: center;
+  }
+
+  .topbar h1 {
+    font-family: 'Oswald', sans-serif; font-size: 1.3rem; font-weight: 700;
+    color: #f5f5f5; letter-spacing: 3px; text-transform: uppercase; white-space: nowrap;
+  }
+
+  .search-box { flex: 1; max-width: 420px; position: relative; }
+
+  .search-box input {
+    width: 100%; background: var(--input-bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px 8px 34px; color: var(--text);
+    font-family: inherit; font-size: 13px; font-weight: 300; outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-box input:focus { border-color: var(--accent); }
+  .search-box input::placeholder { color: var(--text-muted); font-weight: 300; }
+
+  .search-icon {
+    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    color: var(--text-muted); font-size: 14px; pointer-events: none;
+  }
+
+  .kbd {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 3px;
+    padding: 1px 6px; font-size: 11px; color: var(--text-muted);
+    font-family: 'Oswald', monospace; pointer-events: none;
+  }
+
+  .btn-add {
+    background: var(--green); color: #fff; border: none; border-radius: 6px;
+    padding: 8px 16px; font-family: inherit; font-size: 13px; font-weight: 400;
+    cursor: pointer; white-space: nowrap; transition: background 0.15s; letter-spacing: 0.5px;
+  }
+  .btn-add:hover { background: var(--green-hover); }
+
+  /* ─── Stat bar ─── */
+  .stat-bar {
+    display: flex; justify-content: center; gap: 24px;
+    padding: 10px 24px; border-bottom: 1px solid var(--border);
+  }
+  .stat-item { display: flex; align-items: baseline; gap: 6px; }
+  .stat-value { font-family: 'Oswald', sans-serif; font-size: 1.1rem; font-weight: 600; color: var(--accent); }
+  .stat-label { font-size: 0.7rem; color: var(--text-muted); letter-spacing: 1px; }
+
+  /* ─── Main grid ─── */
+  .main { padding: 20px 24px 40px; max-width: 1400px; margin: 0 auto; }
+  .grid-header { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+  .btn-add-cat {
+    background: none; border: 1px solid var(--border); color: var(--text-muted);
+    border-radius: 6px; padding: 4px 12px; font-family: 'Oswald', sans-serif;
+    font-size: 0.75rem; letter-spacing: 1px; cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-add-cat:hover { border-color: var(--accent); color: var(--accent); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+
+  /* ─── Card ─── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; transition: border-color 0.15s;
+  }
+  .card:hover { border-color: var(--border-hover); }
+
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; cursor: pointer; user-select: none;
+    border-bottom: 1px solid var(--border); transition: background 0.1s;
+  }
+  .card-header:hover { background: var(--surface-2); }
+
+  .card-title {
+    font-family: 'Oswald', sans-serif; font-size: 0.8rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 2px; color: var(--accent);
+  }
+
+  .card-right { display: flex; align-items: center; gap: 8px; }
+  .badge { font-family: 'Oswald', sans-serif; font-size: 0.75rem; font-weight: 400; color: var(--text-muted); }
+  .chevron { color: var(--text-muted); font-size: 10px; transition: transform 0.2s; }
+
+  .card.collapsed .chevron { transform: rotate(-90deg); }
+  .card.collapsed .card-body { display: none; }
+  .card.collapsed .card-header { border-bottom-color: transparent; }
+
+  /* ─── Card body ─── */
+  .card-body { padding: 8px 12px 10px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+
+  /* ─── Link chip ─── */
+  .link-chip {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 5px; aspect-ratio: 1; padding: 6px;
+    transition: border-color 0.15s, background 0.15s;
+    position: relative; cursor: grab; overflow: hidden;
+  }
+  .link-chip:hover { border-color: var(--border-hover); background: #343434; }
+  .link-chip.dragging { opacity: 0.3; cursor: grabbing; }
+
+  .link-chip img.favicon {
+    width: 20px; height: 20px; border-radius: 3px; margin-bottom: 4px;
+    image-rendering: auto; flex-shrink: 0;
+  }
+
+  .link-chip a {
+    color: var(--link); text-decoration: none; font-size: 11px; font-weight: 300;
+    overflow: hidden; text-overflow: ellipsis; text-align: center;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    word-break: break-word; overflow-wrap: break-word; line-height: 1.3; transition: color 0.15s;
+  }
+  .link-chip a:hover { color: var(--link-hover); }
+
+  .link-actions {
+    position: absolute; top: 3px; right: 3px;
+    display: flex; gap: 1px; opacity: 0; transition: opacity 0.15s;
+  }
+  .link-chip:hover .link-actions { opacity: 1; }
+
+  .link-actions button {
+    background: none; border: none; color: var(--text-muted); cursor: pointer;
+    padding: 1px 4px; border-radius: 3px; font-size: 11px; line-height: 1;
+  }
+  .link-actions button:hover { background: var(--border); color: var(--text); }
+  .link-actions button.del:hover { color: var(--danger); }
+
+  /* ─── Sub-card (nested) ─── */
+  .sub-card {
+    grid-column: 1 / -1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 2px;
+  }
+
+  .sub-card .card-header {
+    padding: 6px 10px;
+    background: #1e1e1e;
+    border-bottom: 1px solid #2a2a2a;
+  }
+
+  .sub-card .card-header:hover { background: #262626; }
+
+  .sub-card .card-title {
+    font-size: 0.7rem;
+    letter-spacing: 1.5px;
+    color: #a78bfa;
+  }
+
+  .sub-card .badge { font-size: 0.65rem; }
+  .sub-card .chevron { font-size: 9px; }
+
+  .sub-card .card-body {
+    padding: 6px 8px 8px;
+    background: #1c1c1c;
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+  }
+
+  .sub-card.collapsed .card-body { display: none; }
+  .sub-card.collapsed .card-header { border-bottom-color: transparent; }
+
+  .sub-card .eject-btn {
+    background: none; border: none; color: var(--text-muted);
+    cursor: pointer; font-size: 11px; padding: 1px 4px; border-radius: 3px;
+    opacity: 0; transition: opacity 0.15s;
+  }
+  .sub-card .card-header:hover .eject-btn { opacity: 1; }
+  .sub-card .eject-btn:hover { background: var(--border); color: var(--accent); }
+
+  /* ─── Drag & Drop ─── */
+  .card.drag-over, .sub-card.drag-over {
+    border-color: var(--accent) !important;
+    background: #2a2818;
+  }
+  .card.drag-over > .card-header { background: #2a2818; }
+
+  .card.card-dragging { opacity: 0.3; }
+
+  /* ─── Hidden cards ─── */
+  .card-hidden { border-color: #3a2a2a; }
+  .card-hidden .card-title { color: #f85149; }
+  .card-hidden .card-header:hover { background: #2a2020; }
+
+  /* ─── Modal ─── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    z-index: 200; align-items: center; justify-content: center; backdrop-filter: blur(2px);
+  }
+  .modal-overlay.active { display: flex; }
+
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 24px; width: 400px; max-width: 90vw;
+  }
+  .modal h2 {
+    font-family: 'Oswald', sans-serif; font-size: 0.9rem; font-weight: 600;
+    letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin-bottom: 20px;
+  }
+  .form-group { margin-bottom: 14px; }
+  .form-group label {
+    display: block; font-size: 0.7rem; font-weight: 400; color: var(--text-dim);
+    margin-bottom: 5px; letter-spacing: 0.5px;
+  }
+  .form-group select, .form-group input {
+    width: 100%; background: var(--input-bg); border: 1px solid var(--border);
+    border-radius: 5px; padding: 8px 10px; color: var(--text);
+    font-family: inherit; font-size: 13px; font-weight: 300; outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-group select:focus, .form-group input:focus { border-color: var(--accent); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+  .btn-cancel {
+    background: none; color: var(--text-dim); border: 1px solid var(--border);
+    border-radius: 5px; padding: 7px 14px; font-family: inherit; font-size: 13px;
+    cursor: pointer; transition: border-color 0.15s;
+  }
+  .btn-cancel:hover { border-color: var(--border-hover); color: var(--text); }
+
+  .btn-save {
+    background: var(--green); color: #fff; border: none; border-radius: 5px;
+    padding: 7px 14px; font-family: inherit; font-size: 13px; font-weight: 400; cursor: pointer;
+  }
+  .btn-save:hover { background: var(--green-hover); }
+
+  /* ─── Responsive ─── */
+  @media (max-width: 768px) {
+    .topbar { padding: 10px 16px; gap: 10px; }
+    .topbar h1 { font-size: 1rem; letter-spacing: 2px; }
+    .stat-bar { padding: 8px 16px; gap: 16px; }
+    .main { padding: 16px; }
+    .grid { grid-template-columns: 1fr; }
+    .kbd { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Links</h1>
+  <div class="search-box">
+    <span class="search-icon">⌕</span>
+    <input type="text" id="search" placeholder="검색..." oninput="filterLinks()">
+    <span class="kbd">/</span>
+  </div>
+  <button class="btn-add" onclick="openModal()">+ 추가</button>
+</div>
+
+<div class="stat-bar">
+  <div class="stat-item">
+    <span class="stat-value" id="total-count">0</span>
+    <span class="stat-label">LINKS</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-value" id="cat-count">0</span>
+    <span class="stat-label">CATEGORIES</span>
+  </div>
+</div>
+
+<div class="main">
+  <div class="grid-header">
+    <button class="btn-add-cat" onclick="addCategory()">+ 카테고리</button>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2>Add Link</h2>
+    <div class="form-group">
+      <label>카테고리</label>
+      <select id="modal-cat"></select>
+    </div>
+    <div class="form-group">
+      <label>링크 이름</label>
+      <input type="text" id="modal-title" placeholder="예: GitHub">
+    </div>
+    <div class="form-group">
+      <label>URL</label>
+      <input type="url" id="modal-url" placeholder="https://...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">취소</button>
+      <button class="btn-save" onclick="closeModal()">저장</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// 데이터: children 배열로 서브카드 지원
+const data = [
+  { name: "top", hidden: false, children: [], links: [
+    { t: "다모앙", u: "https://damoang.net" },
+    { t: "youtube", u: "https://www.youtube.com" },
+    { t: "duckduckgo private email", u: "https://duckduckgo.com/email/settings/autofill" },
+    { t: "aagag", u: "https://aagag.com" },
+    { t: "티카페", u: "https://tcafe2a.com" },
+    { t: "lamu city", u: "https://www.lamu.city/" },
+    { t: "수도권 가성비 플레이스", u: "#" },
+  ]},
+  { name: "utilities", hidden: false, children: [], links: [
+    { t: "epoch converter", u: "https://www.epochconverter.com/" },
+    { t: "crontab guru", u: "https://crontab.guru/" },
+    { t: "ip range to cidr", u: "https://www.ipaddressguide.com/cidr" },
+    { t: "regexp playground", u: "https://regexr.com/" },
+    { t: "base64 enc/dec", u: "https://www.base64encode.org/" },
+    { t: "midi editor", u: "https://signal.vercel.app/edit" },
+    { t: "ulid.page", u: "https://ulid.page" },
+  ]},
+  { name: "work", hidden: false, children: [
+    { name: "work_old", links: [
+      { t: "test: apple login", u: "#" },
+      { t: "test: google login", u: "#" },
+      { t: "google oauth config", u: "#" },
+      { t: "firebase config", u: "#" },
+      { t: "amplitude dashboard", u: "#" },
+    ]},
+  ], links: [
+    { t: "figma stra-web", u: "#" },
+    { t: "stripe", u: "https://dashboard.stripe.com/login" },
+    { t: "github", u: "https://github.com/codabystra" },
+    { t: "aws-ec2", u: "#" },
+    { t: "aws-s3-stra-web-binaries", u: "#" },
+    { t: "stra-web backend local", u: "http://localhost:7712/docs" },
+    { t: "stra-web backend prod", u: "https://api.web.stra.ai/docs" },
+    { t: "서강대 주차등록", u: "#" },
+    { t: "redis-cache", u: "#" },
+    { t: "redis", u: "#" },
+  ]},
+  { name: "reading", hidden: false, children: [], links: [
+    { t: "plain vanilla application", u: "https://plainvanillaweb.com/pages/applications.html" },
+    { t: "curl by example", u: "https://antonz.org/curl-by-example/" },
+    { t: "kia ev 보증연장", u: "#" },
+    { t: "수제 햄버거 만들기", u: "#" },
+  ]},
+  { name: "원신", hidden: false, children: [], links: [
+    { t: "전적", u: "#" },
+    { t: "소셜게임한당", u: "#" },
+    { t: "원신 채널", u: "#" },
+    { t: "기원 통계", u: "https://paimon.moe/wish" },
+    { t: "모든 보물상자 정리", u: "#" },
+    { t: "세팅: 시그윈", u: "#" },
+    { t: "계산기", u: "https://genshin.aspirine.su" },
+    { t: "아카샤 프로필", u: "#" },
+    { t: "폐지런 루트", u: "#" },
+    { t: "원신맵스", u: "#" },
+  ]},
+  { name: "옥정", hidden: false, children: [], links: [
+    { t: "잔금 계산", u: "#" },
+    { t: "힐스테이트 홈페이지", u: "#" },
+    { t: "VR", u: "#" },
+    { t: "파티오포레 입주자 모임", u: "#" },
+  ]},
+  { name: "comics", hidden: true, children: [], links: [
+    { t: "노아 선배는 친구", u: "#" },
+    { t: "여동생은 알고 있다", u: "#" },
+    { t: "나만이 알고 있다", u: "#" },
+    { t: "내 마음 속 위험한 녀석", u: "#" },
+    { t: "학생회에도 구멍은 있다", u: "#" },
+    { t: "헌터x헌터", u: "#" },
+    { t: "최애의 아이", u: "#" },
+    { t: "2.5차원의 유혹", u: "#" },
+  ]},
+  { name: "shopping", hidden: false, children: [], links: [
+    { t: "코베아 컨테이너 화로대", u: "#" },
+    { t: "듀얼센스 쏠리 수리", u: "#" },
+  ]},
+  { name: "xxx", hidden: true, children: [], links: [
+    { t: "FC2-PPV-1976688", u: "#" },
+    { t: "FC2-PPV-2066073", u: "#" },
+    { t: "FC2-PPV-2108354", u: "#" },
+    { t: "hitomi korean", u: "#" },
+    { t: "24av", u: "#" },
+    { t: "4khd", u: "#" },
+  ]},
+];
+
+let unlocked = false;
+const SECRET_TRIGGER = "oo";
+
+// ─── 유틸: 카테고리 찾기 (중첩 포함) ───
+function findCat(name, list = data) {
+  for (const cat of list) {
+    if (cat.name === name) return cat;
+    if (cat.children) {
+      const found = findCat(name, cat.children);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function findParent(name, list = data) {
+  for (const cat of list) {
+    if (cat.children) {
+      const idx = cat.children.findIndex(c => c.name === name);
+      if (idx >= 0) return { parent: cat, idx };
+      const found = findParent(name, cat.children);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+function removeCatFromList(name, list = data) {
+  const idx = list.findIndex(c => c.name === name);
+  if (idx >= 0) return list.splice(idx, 1)[0];
+  for (const cat of list) {
+    if (cat.children) {
+      const removed = removeCatFromList(name, cat.children);
+      if (removed) return removed;
+    }
+  }
+  return null;
+}
+
+function countLinks(cat) {
+  let n = cat.links.length;
+  if (cat.children) cat.children.forEach(c => n += countLinks(c));
+  return n;
+}
+
+// ─── 렌더링 ───
+function faviconUrl(url) {
+  try {
+    const host = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?domain=${host}&sz=64`;
+  } catch { return ""; }
+}
+
+function renderChips(links, catName) {
+  return links.map((l, i) => {
+    const fav = faviconUrl(l.u);
+    const favImg = fav ? `<img class="favicon" src="${fav}" alt="" draggable="false" onerror="this.style.display='none'">` : "";
+    return `
+    <div class="link-chip" draggable="true" data-cat="${catName}" data-idx="${i}"
+         ondragstart="onChipDragStart(event)" ondragend="onChipDragEnd(event)">
+      ${favImg}
+      <a href="${l.u}" target="_blank" draggable="false">${l.t}</a>
+      <div class="link-actions">
+        <button title="편집" onclick="event.stopPropagation()">✎</button>
+        <button class="del" title="삭제" onclick="event.stopPropagation()">✕</button>
+      </div>
+    </div>
+  `}).join("");
+}
+
+function renderSubCard(sub) {
+  const chips = renderChips(sub.links, sub.name);
+  return `
+    <div class="sub-card" data-card-cat="${sub.name}"
+         ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+      <div class="card-header" draggable="true"
+           ondragstart="onCardDragStart(event, '${sub.name}')" ondragend="onCardDragEnd(event)"
+           onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="card-title">${sub.name}</span>
+        <div class="card-right">
+          <button class="eject-btn" title="꺼내기" onclick="event.stopPropagation(); ejectSubCard('${sub.name}')">⤴</button>
+          <span class="badge">${sub.links.length}</span>
+          <span class="chevron">▾</span>
+        </div>
+      </div>
+      <div class="card-body">${chips}</div>
+    </div>
+  `;
+}
+
+function render(filter = "") {
+  const grid = document.getElementById("grid");
+  const q = filter.toLowerCase();
+  let totalLinks = 0;
+  let visibleCats = 0;
+
+  grid.innerHTML = data.map(cat => {
+    if (cat.hidden && !unlocked) return "";
+
+    // 필터링
+    const filteredLinks = cat.links.filter(l =>
+      !q || l.t.toLowerCase().includes(q) || cat.name.toLowerCase().includes(q)
+    );
+    const hasMatchingChildren = cat.children && cat.children.some(sub =>
+      sub.links.some(l => l.t.toLowerCase().includes(q)) || sub.name.toLowerCase().includes(q)
+    );
+
+    if (q && filteredLinks.length === 0 && !hasMatchingChildren && !cat.name.toLowerCase().includes(q)) return "";
+
+    const shownLinks = q && !cat.name.toLowerCase().includes(q) ? filteredLinks : cat.links;
+    totalLinks += countLinks(cat);
+    visibleCats++;
+
+    const chips = renderChips(shownLinks, cat.name);
+    const subCards = (cat.children || []).map(sub => renderSubCard(sub)).join("");
+
+    return `
+      <div class="card${cat.hidden ? ' card-hidden' : ''}" data-card-cat="${cat.name}"
+           ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+        <div class="card-header" draggable="true"
+             ondragstart="onCardDragStart(event, '${cat.name}')" ondragend="onCardDragEnd(event)"
+             onclick="toggleCard(this.parentElement)">
+          <span class="card-title">${cat.name}</span>
+          <div class="card-right">
+            <span class="badge">${countLinks(cat)}</span>
+            <span class="chevron">▾</span>
+          </div>
+        </div>
+        <div class="card-body">${chips}${subCards}</div>
+      </div>
+    `;
+  }).join("");
+
+  document.getElementById("total-count").textContent = totalLinks;
+  document.getElementById("cat-count").textContent = visibleCats;
+
+  const sel = document.getElementById("modal-cat");
+  const cats = unlocked ? data : data.filter(c => !c.hidden);
+  sel.innerHTML = cats.map(c => `<option>${c.name}</option>`).join("");
+}
+
+function toggleCard(card) { card.classList.toggle("collapsed"); }
+
+function filterLinks() {
+  const val = document.getElementById("search").value;
+  if (val.toLowerCase() === SECRET_TRIGGER) return;
+  render(val);
+}
+
+function handleSearchKey(e) {
+  if (e.key !== "Enter") return;
+  const input = document.getElementById("search");
+  const val = input.value.trim().toLowerCase();
+  if (val === SECRET_TRIGGER) {
+    input.value = "";
+    if (unlocked) { unlocked = false; render(); return; }
+    const pw = prompt("🔒");
+    if (pw === "1234") { unlocked = true; render(); }
+    return;
+  }
+}
+
+// ─── 서브카드 꺼내기 (최상위로 복원) ───
+function ejectSubCard(name) {
+  const removed = removeCatFromList(name);
+  if (removed) {
+    removed.hidden = false;
+    removed.children = removed.children || [];
+    data.push(removed);
+    render(document.getElementById("search").value);
+  }
+}
+
+// ─── Drag & Drop ───
+let dragType = null; // "chip" | "card"
+let dragPayload = null;
+
+// 칩 드래그
+function onChipDragStart(e) {
+  const chip = e.target.closest(".link-chip");
+  dragType = "chip";
+  dragPayload = { cat: chip.dataset.cat, idx: parseInt(chip.dataset.idx) };
+  chip.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", "");
+}
+
+function onChipDragEnd(e) {
+  e.target.closest(".link-chip")?.classList.remove("dragging");
+  clearDragOver();
+  dragType = null; dragPayload = null;
+}
+
+// 카드 드래그
+function onCardDragStart(e, catName) {
+  dragType = "card";
+  dragPayload = { cat: catName };
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", "");
+  // 부모 카드 반투명
+  setTimeout(() => {
+    const el = document.querySelector(`[data-card-cat="${catName}"]`);
+    if (el) el.classList.add("card-dragging");
+  }, 0);
+}
+
+function onCardDragEnd(e) {
+  document.querySelectorAll(".card-dragging").forEach(el => el.classList.remove("card-dragging"));
+  clearDragOver();
+  dragType = null; dragPayload = null;
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = "move";
+  const card = e.target.closest("[data-card-cat]");
+  if (!card || !dragPayload) return;
+  if (card.dataset.cardCat === dragPayload.cat) return;
+  card.classList.add("drag-over");
+}
+
+function onDragLeave(e) {
+  e.stopPropagation();
+  const card = e.target.closest("[data-card-cat]");
+  if (card && !card.contains(e.relatedTarget)) {
+    card.classList.remove("drag-over");
+  }
+}
+
+function onDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const card = e.target.closest("[data-card-cat]");
+  if (!card || !dragPayload) return;
+  card.classList.remove("drag-over");
+
+  const toCatName = card.dataset.cardCat;
+  if (toCatName === dragPayload.cat) return;
+
+  if (dragType === "chip") {
+    // 칩 이동
+    const from = findCat(dragPayload.cat);
+    const to = findCat(toCatName);
+    if (!from || !to) return;
+    const [link] = from.links.splice(dragPayload.idx, 1);
+    to.links.push(link);
+  } else if (dragType === "card") {
+    // 카드를 다른 카드 안에 서브카드로 넣기
+    const toCat = findCat(toCatName);
+    if (!toCat) return;
+    // 자기 자신의 자식에는 못 넣음
+    if (findCat(toCatName, [findCat(dragPayload.cat)].filter(Boolean))) return;
+    const removed = removeCatFromList(dragPayload.cat);
+    if (!removed) return;
+    if (!toCat.children) toCat.children = [];
+    toCat.children.push(removed);
+  }
+
+  dragType = null; dragPayload = null;
+  render(document.getElementById("search").value);
+}
+
+function clearDragOver() {
+  document.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over"));
+}
+
+function addCategory() {
+  const name = prompt("카테고리 이름:");
+  if (!name || !name.trim()) return;
+  const trimmed = name.trim();
+  if (findCat(trimmed)) { alert("이미 존재하는 카테고리입니다."); return; }
+  data.push({ name: trimmed, hidden: false, children: [], links: [] });
+  render(document.getElementById("search").value);
+}
+
+function openModal() {
+  document.getElementById("modal").classList.add("active");
+  setTimeout(() => document.getElementById("modal-title").focus(), 100);
+}
+
+function closeModal() {
+  document.getElementById("modal").classList.remove("active");
+}
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeModal();
+  if (e.key === "/" && !e.target.closest("input,select,textarea")) {
+    e.preventDefault();
+    document.getElementById("search").focus();
+  }
+});
+
+document.getElementById("search").addEventListener("keydown", handleSearchKey);
+
+render();
+</script>
+</body>
+</html>
