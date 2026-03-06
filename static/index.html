@@ -72,6 +72,12 @@
     cursor: pointer; white-space: nowrap; transition: background 0.15s; letter-spacing: 0.5px;
   }
   .btn-add:hover { background: var(--green-hover); }
+  .btn-backup {
+    background: none; color: var(--text-muted); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px; font-family: inherit; font-size: 13px;
+    cursor: pointer; white-space: nowrap; transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-backup:hover { border-color: var(--accent); color: var(--accent); }
 
   /* Stat bar */
   .stat-bar {
@@ -130,6 +136,7 @@
   }
   .link-chip:hover { border-color: var(--border-hover); background: #343434; }
   .link-chip.dragging { opacity: 0.3; cursor: grabbing; }
+  .link-chip.chip-dragging { display: none; }
   .link-chip img.favicon {
     width: 20px; height: 20px; border-radius: 3px; margin-bottom: 4px;
     image-rendering: auto; flex-shrink: 0;
@@ -153,6 +160,14 @@
   .link-actions button:hover { background: var(--border); color: var(--text); }
   .link-actions button.del:hover { color: var(--danger); }
 
+  /* Chip placeholder (drag reorder) */
+  .chip-placeholder {
+    background: rgba(251, 191, 36, 0.08);
+    border: 2px dashed var(--accent);
+    border-radius: 5px;
+    aspect-ratio: 1;
+  }
+
   /* Sub-card */
   .sub-card {
     grid-column: 1 / -1; background: var(--bg); border: 1px solid var(--border);
@@ -169,13 +184,13 @@
   }
   .sub-card.collapsed .card-body { display: none; }
   .sub-card.collapsed .card-header { border-bottom-color: transparent; }
-  .sub-card .eject-btn {
+  .nest-btn, .sub-card .eject-btn {
     background: none; border: none; color: var(--text-muted);
     cursor: pointer; font-size: 11px; padding: 1px 4px; border-radius: 3px;
     opacity: 0; transition: opacity 0.15s;
   }
-  .sub-card .card-header:hover .eject-btn { opacity: 1; }
-  .sub-card .eject-btn:hover { background: var(--border); color: var(--accent); }
+  .card-header:hover .nest-btn, .sub-card .card-header:hover .eject-btn { opacity: 1; }
+  .nest-btn:hover, .sub-card .eject-btn:hover { background: var(--border); color: var(--accent); }
 
   /* Drag & Drop */
   .card.drag-over, .sub-card.drag-over { border-color: var(--accent) !important; background: #2a2818; }
@@ -230,6 +245,27 @@
     padding: 7px 14px; font-family: inherit; font-size: 13px; font-weight: 400; cursor: pointer;
   }
   .btn-save:hover { background: var(--green-hover); }
+  .btn-danger {
+    background: var(--danger); color: #fff; border: none; border-radius: 5px;
+    padding: 7px 14px; font-family: inherit; font-size: 13px; font-weight: 400; cursor: pointer;
+  }
+  .btn-danger:hover { background: #e5443c; }
+
+  /* Toast */
+  .toast-container {
+    position: fixed; bottom: 20px; right: 20px; z-index: 400;
+    display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+  }
+  .toast {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 16px; font-size: 13px;
+    color: var(--text); box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    animation: toastIn 0.2s ease; max-width: 340px;
+    pointer-events: auto;
+  }
+  .toast.error { border-color: var(--danger); color: var(--danger); }
+  .toast.success { border-color: var(--green); color: var(--green); }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
   @media (max-width: 768px) {
     .topbar { padding: 10px 16px; gap: 10px; }
@@ -251,6 +287,7 @@
     <span class="kbd">/</span>
   </div>
   <button class="btn-add" onclick="openModal()">+ &#xCD94;&#xAC00;</button>
+  <button class="btn-backup" onclick="downloadBackup()">&#x2193; &#xBC31;&#xC5C5;</button>
 </div>
 
 <div class="stat-bar">
@@ -294,6 +331,28 @@
   </div>
 </div>
 
+<!-- Prompt Modal (generic: input, select, confirm) -->
+<div class="modal-overlay" id="prompt-modal">
+  <div class="modal">
+    <h2 id="pm-heading"></h2>
+    <div class="form-group" id="pm-input-area">
+      <label id="pm-input-label"></label>
+      <input type="text" id="pm-input">
+    </div>
+    <div class="form-group" id="pm-select-area" style="display:none">
+      <label id="pm-select-label"></label>
+      <select id="pm-select"></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="resolvePrompt(null)">취소</button>
+      <button class="btn-save" id="pm-ok-btn" onclick="resolvePrompt('ok')">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toasts"></div>
+
 <script>
 let data = [];
 let unlocked = false;
@@ -302,6 +361,77 @@ const SECRET_TRIGGER = "oo";
 // Edit state
 let editingLinkId = null;
 
+// --- Toast ---
+function showToast(msg, type) {
+  const container = document.getElementById("toasts");
+  const toast = document.createElement("div");
+  toast.className = "toast" + (type ? " " + type : "");
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transition = "opacity 0.3s";
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// --- Prompt Modal (promise-based) ---
+let promptResolve = null;
+
+function showPrompt({ heading, inputLabel, inputValue, inputType, selectLabel, options, confirmOnly }) {
+  return new Promise(resolve => {
+    promptResolve = resolve;
+    document.getElementById("pm-heading").textContent = heading;
+
+    const inputArea = document.getElementById("pm-input-area");
+    const selectArea = document.getElementById("pm-select-area");
+    const input = document.getElementById("pm-input");
+
+    if (inputLabel && !confirmOnly) {
+      inputArea.style.display = "block";
+      document.getElementById("pm-input-label").textContent = inputLabel;
+      input.type = inputType || "text";
+      input.value = inputValue || "";
+    } else {
+      inputArea.style.display = "none";
+    }
+
+    if (options) {
+      selectArea.style.display = "block";
+      document.getElementById("pm-select-label").textContent = selectLabel || "";
+      const sel = document.getElementById("pm-select");
+      sel.innerHTML = options.map((o, i) => `<option value="${i}">${escapeHtml(o)}</option>`).join("");
+    } else {
+      selectArea.style.display = "none";
+    }
+
+    const okBtn = document.getElementById("pm-ok-btn");
+    okBtn.className = confirmOnly === "danger" ? "btn-danger" : "btn-save";
+    okBtn.textContent = confirmOnly === "danger" ? "삭제" : "확인";
+
+    document.getElementById("prompt-modal").classList.add("active");
+    if (inputLabel && !confirmOnly) setTimeout(() => input.focus(), 100);
+  });
+}
+
+function resolvePrompt(action) {
+  document.getElementById("prompt-modal").classList.remove("active");
+  if (!promptResolve) return;
+  const fn = promptResolve;
+  promptResolve = null;
+  if (action !== "ok") { fn(null); return; }
+
+  const result = {};
+  if (document.getElementById("pm-input-area").style.display !== "none") {
+    result.input = document.getElementById("pm-input").value;
+  }
+  if (document.getElementById("pm-select-area").style.display !== "none") {
+    result.selectIndex = parseInt(document.getElementById("pm-select").value);
+  }
+  fn(result);
+}
+
+// --- API ---
 async function api(method, path, body) {
   const opts = { method, headers: { "Content-Type": "application/json" } };
   if (body) opts.body = JSON.stringify(body);
@@ -367,12 +497,13 @@ function renderSubCard(sub) {
            onclick="this.parentElement.classList.toggle('collapsed')">
         <span class="card-title">${escapeHtml(sub.name)}</span>
         <div class="card-right">
+          <button class="eject-btn" title="이름 변경" onclick="event.stopPropagation(); renameCategory(${sub.id}, '${escapeHtml(sub.name)}')">&#x270E;</button>
           <button class="eject-btn" title="꺼내기" onclick="event.stopPropagation(); ejectSubCard(${sub.id})">&#x2934;</button>
           <span class="badge">${(sub.links||[]).length}</span>
           <span class="chevron">&#x25BE;</span>
         </div>
       </div>
-      <div class="card-body">${chips}</div>
+      <div class="card-body" ondragover="onChipBodyDragOver(event, ${sub.id})" ondrop="onChipBodyDrop(event, ${sub.id})">${chips}</div>
     </div>`;
 }
 
@@ -383,7 +514,6 @@ function render(filter) {
   let visibleCats = 0;
 
   grid.innerHTML = data.map(cat => {
-    // hidden mode filter
     if (unlocked && !cat.hidden) return "";
     if (!unlocked && cat.hidden) return "";
 
@@ -414,11 +544,13 @@ function render(filter) {
              onclick="toggleCard(this.parentElement)">
           <span class="card-title">${escapeHtml(cat.name)}</span>
           <div class="card-right">
+            <button class="nest-btn" title="이름 변경" onclick="event.stopPropagation(); renameCategory(${cat.id}, '${escapeHtml(cat.name)}')">&#x270E;</button>
+            <button class="nest-btn" title="서브카드로 넣기" onclick="event.stopPropagation(); nestCard(${cat.id})">&#x2935;</button>
             <span class="badge">${countLinks(cat)}</span>
             <span class="chevron">&#x25BE;</span>
           </div>
         </div>
-        <div class="card-body">${chips}${subCards}</div>
+        <div class="card-body" ondragover="onChipBodyDragOver(event, ${cat.id})" ondrop="onChipBodyDrop(event, ${cat.id})">${chips}${subCards}</div>
       </div>`;
   }).join("");
 
@@ -437,7 +569,7 @@ function updateModalCategories() {
     (c.children || []).forEach(sub => cats.push(sub));
   });
   sel.innerHTML = cats.map(c => {
-    const prefix = c.parent_id ? "  └ " : "";
+    const prefix = c.parent_id ? "  \u2514 " : "";
     return `<option value="${c.id}">${prefix}${escapeHtml(c.name)}</option>`;
   }).join("");
 }
@@ -450,15 +582,15 @@ function filterLinks() {
   render(val);
 }
 
-function handleSearchKey(e) {
+async function handleSearchKey(e) {
   if (e.key !== "Enter") return;
   const input = document.getElementById("search");
   const val = input.value.trim().toLowerCase();
   if (val === SECRET_TRIGGER) {
     input.value = "";
     if (unlocked) { unlocked = false; loadData(); return; }
-    const pw = prompt("\uD83D\uDD12");
-    if (pw === "1234") { unlocked = true; render(); }
+    const result = await showPrompt({ heading: "\uD83D\uDD12", inputLabel: "비밀번호", inputType: "password" });
+    if (result && result.input === "1234") { unlocked = true; render(); }
   }
 }
 
@@ -502,7 +634,7 @@ async function saveLink() {
   const catId = parseInt(document.getElementById("modal-cat").value);
   const title = document.getElementById("modal-title").value.trim();
   const url = document.getElementById("modal-url").value.trim();
-  if (!title || !url) { alert("제목과 URL을 입력하세요"); return; }
+  if (!title || !url) { showToast("제목과 URL을 입력하세요", "error"); return; }
 
   try {
     if (editingLinkId) {
@@ -513,7 +645,7 @@ async function saveLink() {
     closeModal();
     await loadData();
   } catch (e) {
-    alert("저장 실패: " + e.message);
+    showToast("저장 실패: " + e.message, "error");
     location.reload();
   }
 }
@@ -521,24 +653,36 @@ async function saveLink() {
 function editLink(id) { openModal(id); }
 
 async function deleteLink(id) {
-  if (!confirm("이 링크를 삭제하시겠습니까?")) return;
+  const result = await showPrompt({ heading: "링크 삭제", inputLabel: null, confirmOnly: "danger" });
+  if (!result) return;
   try {
     await api("DELETE", `/api/links/${id}`);
     await loadData();
   } catch (e) {
-    alert("삭제 실패: " + e.message);
+    showToast("삭제 실패: " + e.message, "error");
     location.reload();
   }
 }
 
 async function addCategory() {
-  const name = prompt("카테고리 이름:");
-  if (!name || !name.trim()) return;
+  const result = await showPrompt({ heading: "카테고리 추가", inputLabel: "이름" });
+  if (!result || !result.input?.trim()) return;
   try {
-    await api("POST", "/api/categories", { name: name.trim(), hidden: unlocked });
+    await api("POST", "/api/categories", { name: result.input.trim(), hidden: unlocked });
     await loadData();
   } catch (e) {
-    alert("생성 실패: " + e.message);
+    showToast("생성 실패: " + e.message, "error");
+  }
+}
+
+async function renameCategory(id, currentName) {
+  const result = await showPrompt({ heading: "이름 변경", inputLabel: "새 이름", inputValue: currentName });
+  if (!result || !result.input?.trim() || result.input.trim() === currentName) return;
+  try {
+    await api("PUT", `/api/categories/${id}`, { name: result.input.trim() });
+    await loadData();
+  } catch (e) {
+    showToast("이름 변경 실패: " + e.message, "error");
   }
 }
 
@@ -547,8 +691,47 @@ async function ejectSubCard(id) {
     await api("PUT", `/api/categories/${id}/move`, { parent_id: null });
     await loadData();
   } catch (e) {
-    alert("꺼내기 실패: " + e.message);
+    showToast("꺼내기 실패: " + e.message, "error");
     location.reload();
+  }
+}
+
+async function nestCard(id) {
+  const source = data.find(c => c.id === id);
+  const isHidden = source && source.hidden;
+  const targets = data.filter(c => c.id !== id && !(c.children || []).length && c.hidden === isHidden);
+  if (!targets.length) { showToast("넣을 수 있는 카테고리가 없습니다", "error"); return; }
+  const result = await showPrompt({
+    heading: "서브카드로 넣기",
+    selectLabel: "대상 카테고리",
+    options: targets.map(t => t.name)
+  });
+  if (!result) return;
+  const idx = result.selectIndex;
+  if (idx < 0 || idx >= targets.length) return;
+  try {
+    await api("PUT", `/api/categories/${id}/move`, { parent_id: targets[idx].id });
+    await loadData();
+  } catch (e) {
+    showToast("이동 실패: " + e.message, "error");
+    location.reload();
+  }
+}
+
+// --- Backup ---
+async function downloadBackup() {
+  try {
+    const exportData = await api("GET", "/api/export");
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `links-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("백업 다운로드 완료", "success");
+  } catch (e) {
+    showToast("백업 실패: " + e.message, "error");
   }
 }
 
@@ -562,18 +745,120 @@ let lastMoveTime = 0;
 function onChipDragStart(e) {
   const chip = e.target.closest(".link-chip");
   dragType = "chip";
-  dragPayload = { linkId: parseInt(chip.dataset.linkId), catId: parseInt(chip.dataset.catId) };
-  chip.classList.add("dragging");
+  const linkId = parseInt(chip.dataset.linkId);
+  const catId = parseInt(chip.dataset.catId);
+  dragPayload = { linkId, catId };
   e.dataTransfer.effectAllowed = "move";
   e.dataTransfer.setData("text/plain", "");
+
+  setTimeout(() => {
+    const body = chip.closest(".card-body");
+    const chips = [...body.querySelectorAll(":scope > .link-chip")];
+    const firstRects = new Map();
+    chips.forEach(c => firstRects.set(c, c.getBoundingClientRect()));
+
+    dragPlaceholder = document.createElement("div");
+    dragPlaceholder.className = "chip-placeholder";
+    body.insertBefore(dragPlaceholder, chip);
+    chip.classList.add("chip-dragging");
+
+    flipPlay(chips.filter(c => c !== chip), firstRects);
+  }, 0);
 }
 
 function onChipDragEnd(e) {
-  e.target.closest(".link-chip")?.classList.remove("dragging");
+  const chip = e.target.closest(".link-chip");
+  if (chip) { chip.classList.remove("dragging"); chip.classList.remove("chip-dragging"); }
+  if (dragPlaceholder) { dragPlaceholder.remove(); dragPlaceholder = null; }
   clearDragState();
 }
 
-// Chip drop on card/sub-card
+// Chip reorder within same card-body
+function onChipBodyDragOver(e, catId) {
+  if (dragType !== "chip" || !dragPayload || !dragPlaceholder) return;
+  if (catId !== dragPayload.catId) return; // different card, let bubble
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = "move";
+
+  const now = Date.now();
+  if (now - lastMoveTime < 80) return;
+  lastMoveTime = now;
+
+  const body = e.currentTarget;
+  const chips = [...body.querySelectorAll(":scope > .link-chip:not(.chip-dragging)")];
+
+  // Find insertion point in 5-column grid (same logic as card grid)
+  let insertBefore = null;
+  for (const chip of chips) {
+    const rect = chip.getBoundingClientRect();
+    if (e.clientY < rect.top) { insertBefore = chip; break; }
+    if (e.clientY < rect.bottom && e.clientX < rect.left + rect.width / 2) {
+      insertBefore = chip; break;
+    }
+  }
+
+  // Don't move if already at position
+  const currentNext = dragPlaceholder.nextElementSibling;
+  if (insertBefore === currentNext) return;
+  if (!insertBefore) {
+    // Insert at end (before any sub-card)
+    const firstSubCard = body.querySelector(":scope > .sub-card");
+    if (firstSubCard) {
+      if (currentNext === firstSubCard) return;
+    } else {
+      if (currentNext === null) return;
+    }
+  }
+
+  // FLIP: First
+  const firstRects = new Map();
+  chips.forEach(c => firstRects.set(c, c.getBoundingClientRect()));
+
+  if (insertBefore) {
+    body.insertBefore(dragPlaceholder, insertBefore);
+  } else {
+    const firstSubCard = body.querySelector(":scope > .sub-card");
+    if (firstSubCard) body.insertBefore(dragPlaceholder, firstSubCard);
+    else body.appendChild(dragPlaceholder);
+  }
+
+  // FLIP: Play
+  flipPlay(chips, firstRects);
+}
+
+async function onChipBodyDrop(e, catId) {
+  if (dragType !== "chip" || !dragPayload || !dragPlaceholder) return;
+  if (catId !== dragPayload.catId) return; // different card, let bubble
+  e.preventDefault();
+  e.stopPropagation();
+
+  const body = e.currentTarget;
+  const ids = [];
+  for (const child of body.children) {
+    if (child === dragPlaceholder) {
+      ids.push(dragPayload.linkId);
+    } else if (child.classList.contains("link-chip") && !child.classList.contains("chip-dragging")) {
+      ids.push(parseInt(child.dataset.linkId));
+    }
+  }
+
+  // Cleanup
+  const chip = body.querySelector(".chip-dragging");
+  if (chip) chip.classList.remove("chip-dragging");
+  if (dragPlaceholder) { dragPlaceholder.remove(); dragPlaceholder = null; }
+
+  try {
+    await api("PUT", "/api/links/reorder", { category_id: catId, ordered_ids: ids });
+    await loadData();
+  } catch (err) {
+    showToast("순서 변경 실패: " + err.message, "error");
+    location.reload();
+  }
+  clearDragState();
+}
+
+// Chip drop on sub-card (cross-card move)
 function onDragOver(e) {
   if (dragType !== "chip") return;
   e.preventDefault();
@@ -600,11 +885,16 @@ async function onDrop(e) {
   card.classList.remove("drag-over");
   const toCatId = parseInt(card.dataset.cardId);
   if (toCatId === dragPayload.catId) return;
+
+  // Cleanup placeholder
+  if (dragPlaceholder) { dragPlaceholder.remove(); dragPlaceholder = null; }
+  document.querySelector(".chip-dragging")?.classList.remove("chip-dragging");
+
   try {
     await api("PUT", `/api/links/${dragPayload.linkId}/move`, { category_id: toCatId });
     await loadData();
   } catch (e) {
-    alert("이동 실패: " + e.message);
+    showToast("이동 실패: " + e.message, "error");
     location.reload();
   }
   dragType = null; dragPayload = null;
@@ -619,26 +909,22 @@ function onCardDragStart(e, catId) {
 
   const card = e.target.closest(".card[data-card-id]");
   setTimeout(() => {
-    // FLIP: record positions before DOM change
     const grid = document.getElementById("grid");
     const siblings = [...grid.querySelectorAll(":scope > .card[data-card-id]")];
     const firstRects = new Map();
     siblings.forEach(c => firstRects.set(c, c.getBoundingClientRect()));
 
-    // Create placeholder, hide original
     dragPlaceholder = document.createElement("div");
     dragPlaceholder.className = "card-placeholder";
     dragPlaceholder.style.minHeight = card.offsetHeight + "px";
     grid.insertBefore(dragPlaceholder, card);
     card.classList.add("card-dragging");
 
-    // FLIP: animate siblings
     flipPlay(siblings.filter(c => c !== card), firstRects);
   }, 0);
 }
 
 function onCardDragEnd(e) {
-  // Restore if drop didn't happen
   const card = document.querySelector(".card-dragging");
   if (card) card.classList.remove("card-dragging");
   if (dragPlaceholder) { dragPlaceholder.remove(); dragPlaceholder = null; }
@@ -657,7 +943,6 @@ function onCardDragOver(e) {
     if (parseInt(card.dataset.cardId) === dragPayload.catId) return;
     card.classList.add("drag-over");
   }
-  // card drag: don't stopPropagation, let grid handle
 }
 
 async function onCardDrop(e) {
@@ -670,13 +955,20 @@ async function onCardDrop(e) {
     card.classList.remove("drag-over");
     const toCatId = parseInt(card.dataset.cardId);
     if (toCatId === dragPayload.catId) return;
+
+    // Cleanup placeholder
+    if (dragPlaceholder) { dragPlaceholder.remove(); dragPlaceholder = null; }
+    document.querySelector(".chip-dragging")?.classList.remove("chip-dragging");
+
     try {
       await api("PUT", `/api/links/${dragPayload.linkId}/move`, { category_id: toCatId });
       await loadData();
-    } catch (err) { alert("이동 실패: " + err.message); location.reload(); }
+    } catch (err) {
+      showToast("이동 실패: " + err.message, "error");
+      location.reload();
+    }
     dragType = null; dragPayload = null;
   }
-  // card drag: grid handles it
 }
 
 // Grid-level: handle card reorder with FLIP animation
@@ -693,35 +985,28 @@ function onGridDragOver(e) {
   const cards = [...grid.querySelectorAll(":scope > .card[data-card-id]")]
     .filter(c => !c.classList.contains("card-dragging"));
 
-  // Find insertion point (2D grid: row-major order)
   let insertBefore = null;
   for (const card of cards) {
     const rect = card.getBoundingClientRect();
-    // Mouse is above this card's row → insert before
     if (e.clientY < rect.top) { insertBefore = card; break; }
-    // Mouse is in this card's row → compare X
     if (e.clientY < rect.bottom && e.clientX < rect.left + rect.width / 2) {
       insertBefore = card; break;
     }
   }
 
-  // Check if placeholder is already at this position
   const currentNext = dragPlaceholder.nextElementSibling;
   if (insertBefore === currentNext) return;
   if (!insertBefore && currentNext === null) return;
 
-  // FLIP: First
   const firstRects = new Map();
   cards.forEach(c => firstRects.set(c, c.getBoundingClientRect()));
 
-  // Move placeholder
   if (insertBefore) {
     grid.insertBefore(dragPlaceholder, insertBefore);
   } else {
     grid.appendChild(dragPlaceholder);
   }
 
-  // FLIP: Play
   flipPlay(cards, firstRects);
 }
 
@@ -739,7 +1024,6 @@ async function onGridDrop(e) {
     }
   }
 
-  // Cleanup
   const card = document.querySelector(".card-dragging");
   if (card) card.classList.remove("card-dragging");
   if (dragPlaceholder) { dragPlaceholder.remove(); dragPlaceholder = null; }
@@ -748,27 +1032,27 @@ async function onGridDrop(e) {
     await api("PUT", "/api/categories/reorder", { parent_id: null, ordered_ids: ids });
     await loadData();
   } catch (err) {
-    alert("순서 변경 실패: " + err.message);
+    showToast("순서 변경 실패: " + err.message, "error");
     location.reload();
   }
   dragType = null; dragPayload = null;
 }
 
 // FLIP animation helper
-function flipPlay(cards, firstRects) {
-  cards.forEach(card => {
-    const first = firstRects.get(card);
+function flipPlay(elements, firstRects) {
+  elements.forEach(el => {
+    const first = firstRects.get(el);
     if (!first) return;
-    const last = card.getBoundingClientRect();
+    const last = el.getBoundingClientRect();
     const dx = first.left - last.left;
     const dy = first.top - last.top;
     if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
-    card.style.transform = `translate(${dx}px, ${dy}px)`;
-    card.style.transition = "none";
-    card.offsetHeight; // force reflow
-    card.style.transition = "transform 0.15s ease";
-    card.style.transform = "";
-    card.addEventListener("transitionend", () => { card.style.transition = ""; }, { once: true });
+    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    el.style.transition = "none";
+    el.offsetHeight;
+    el.style.transition = "transform 0.15s ease";
+    el.style.transform = "";
+    el.addEventListener("transitionend", () => { el.style.transition = ""; }, { once: true });
   });
 }
 
@@ -780,11 +1064,21 @@ function clearDragState() {
 
 // --- Keyboard ---
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") closeModal();
+  if (e.key === "Escape") {
+    if (document.getElementById("prompt-modal").classList.contains("active")) {
+      resolvePrompt(null);
+    } else {
+      closeModal();
+    }
+  }
   if (e.key === "/" && !e.target.closest("input,select,textarea")) {
     e.preventDefault();
     document.getElementById("search").focus();
   }
+});
+
+document.getElementById("pm-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") resolvePrompt("ok");
 });
 
 document.getElementById("search").addEventListener("keydown", handleSearchKey);
