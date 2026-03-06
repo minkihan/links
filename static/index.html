@@ -180,10 +180,11 @@
   /* Drag & Drop */
   .card.drag-over, .sub-card.drag-over { border-color: var(--accent) !important; background: #2a2818; }
   .card.drag-over > .card-header { background: #2a2818; }
-  .card.card-dragging { opacity: 0.3; }
-  .drop-indicator {
-    height: 3px; background: var(--accent); border-radius: 2px; margin: 2px 0;
-    grid-column: 1 / -1;
+  .card.card-dragging { display: none; }
+  .card-placeholder {
+    background: rgba(251, 191, 36, 0.08);
+    border: 2px dashed var(--accent);
+    border-radius: 8px;
   }
 
   /* Hidden cards */
@@ -267,7 +268,7 @@
   <div class="grid-header">
     <button class="btn-add-cat" onclick="addCategory()">+ &#xCE74;&#xD14C;&#xACE0;&#xB9AC;</button>
   </div>
-  <div class="grid" id="grid"></div>
+  <div class="grid" id="grid" ondragover="onGridDragOver(event)" ondrop="onGridDrop(event)"></div>
 </div>
 
 <!-- Add/Edit Link Modal -->
@@ -407,7 +408,7 @@ function render(filter) {
 
     return `
       <div class="card${cat.hidden ? ' card-hidden' : ''}" data-card-id="${cat.id}"
-           ondragover="onCardDragOver(event)" ondragleave="onCardDragLeave(event)" ondrop="onCardDrop(event)">
+           ondragover="onCardDragOver(event)" ondrop="onCardDrop(event)">
         <div class="card-header" draggable="true"
              ondragstart="onCardDragStart(event, ${cat.id})" ondragend="onCardDragEnd(event)"
              onclick="toggleCard(this.parentElement)">
@@ -534,7 +535,7 @@ async function addCategory() {
   const name = prompt("카테고리 이름:");
   if (!name || !name.trim()) return;
   try {
-    await api("POST", "/api/categories", { name: name.trim() });
+    await api("POST", "/api/categories", { name: name.trim(), hidden: unlocked });
     await loadData();
   } catch (e) {
     alert("생성 실패: " + e.message);
@@ -554,7 +555,10 @@ async function ejectSubCard(id) {
 // --- Drag & Drop ---
 let dragType = null; // "chip" | "card"
 let dragPayload = null;
+let dragPlaceholder = null;
+let lastMoveTime = 0;
 
+// Chip drag
 function onChipDragStart(e) {
   const chip = e.target.closest(".link-chip");
   dragType = "chip";
@@ -569,24 +573,9 @@ function onChipDragEnd(e) {
   clearDragState();
 }
 
-function onCardDragStart(e, catId) {
-  dragType = "card";
-  dragPayload = { catId };
-  e.dataTransfer.effectAllowed = "move";
-  e.dataTransfer.setData("text/plain", "");
-  setTimeout(() => {
-    const el = document.querySelector(`[data-card-id="${catId}"]`);
-    if (el) el.classList.add("card-dragging");
-  }, 0);
-}
-
-function onCardDragEnd(e) {
-  document.querySelectorAll(".card-dragging").forEach(el => el.classList.remove("card-dragging"));
-  clearDragState();
-}
-
-// Chip drop on sub-card
+// Chip drop on card/sub-card
 function onDragOver(e) {
+  if (dragType !== "chip") return;
   e.preventDefault();
   e.stopPropagation();
   e.dataTransfer.dropEffect = "move";
@@ -603,6 +592,7 @@ function onDragLeave(e) {
 }
 
 async function onDrop(e) {
+  if (dragType !== "chip") return;
   e.preventDefault();
   e.stopPropagation();
   const card = e.target.closest("[data-card-id]");
@@ -610,13 +600,8 @@ async function onDrop(e) {
   card.classList.remove("drag-over");
   const toCatId = parseInt(card.dataset.cardId);
   if (toCatId === dragPayload.catId) return;
-
   try {
-    if (dragType === "chip") {
-      await api("PUT", `/api/links/${dragPayload.linkId}/move`, { category_id: toCatId });
-    } else if (dragType === "card") {
-      await api("PUT", `/api/categories/${dragPayload.catId}/move`, { parent_id: toCatId });
-    }
+    await api("PUT", `/api/links/${dragPayload.linkId}/move`, { category_id: toCatId });
     await loadData();
   } catch (e) {
     alert("이동 실패: " + e.message);
@@ -625,111 +610,170 @@ async function onDrop(e) {
   dragType = null; dragPayload = null;
 }
 
-// Card-level drag: between (reorder) vs on (nest)
-function onCardDragOver(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  if (!dragPayload) return;
-  e.dataTransfer.dropEffect = "move";
+// Card drag: macOS dashboard style (cards shift in real-time)
+function onCardDragStart(e, catId) {
+  dragType = "card";
+  dragPayload = { catId };
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", "");
+
   const card = e.target.closest(".card[data-card-id]");
-  if (!card) return;
-  const cardId = parseInt(card.dataset.cardId);
+  setTimeout(() => {
+    // FLIP: record positions before DOM change
+    const grid = document.getElementById("grid");
+    const siblings = [...grid.querySelectorAll(":scope > .card[data-card-id]")];
+    const firstRects = new Map();
+    siblings.forEach(c => firstRects.set(c, c.getBoundingClientRect()));
 
-  if (dragType === "chip") {
-    if (cardId === dragPayload.catId) return;
-    card.classList.add("drag-over");
-    return;
-  }
+    // Create placeholder, hide original
+    dragPlaceholder = document.createElement("div");
+    dragPlaceholder.className = "card-placeholder";
+    dragPlaceholder.style.minHeight = card.offsetHeight + "px";
+    grid.insertBefore(dragPlaceholder, card);
+    card.classList.add("card-dragging");
 
-  if (dragType === "card") {
-    if (cardId === dragPayload.catId) return;
-    const rect = card.getBoundingClientRect();
-    const y = e.clientY - rect.top;
-    const ratio = y / rect.height;
-
-    // Remove all indicators
-    document.querySelectorAll(".drop-indicator").forEach(el => el.remove());
-    document.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over"));
-
-    if (ratio < 0.2) {
-      // Top: insert before
-      const indicator = document.createElement("div");
-      indicator.className = "drop-indicator";
-      card.parentElement.insertBefore(indicator, card);
-    } else if (ratio > 0.8) {
-      // Bottom: insert after
-      const indicator = document.createElement("div");
-      indicator.className = "drop-indicator";
-      card.parentElement.insertBefore(indicator, card.nextSibling);
-    } else {
-      // Center: nest as sub-card
-      card.classList.add("drag-over");
-    }
-  }
+    // FLIP: animate siblings
+    flipPlay(siblings.filter(c => c !== card), firstRects);
+  }, 0);
 }
 
-function onCardDragLeave(e) {
-  e.stopPropagation();
-  const card = e.target.closest(".card[data-card-id]");
-  if (card && !card.contains(e.relatedTarget)) {
-    card.classList.remove("drag-over");
-    document.querySelectorAll(".drop-indicator").forEach(el => el.remove());
+function onCardDragEnd(e) {
+  // Restore if drop didn't happen
+  const card = document.querySelector(".card-dragging");
+  if (card) card.classList.remove("card-dragging");
+  if (dragPlaceholder) { dragPlaceholder.remove(); dragPlaceholder = null; }
+  clearDragState();
+}
+
+// Card drag over card (chip: highlight, card: ignored — grid handles it)
+function onCardDragOver(e) {
+  if (!dragPayload) return;
+  if (dragType === "chip") {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    const card = e.target.closest(".card[data-card-id]");
+    if (!card) return;
+    if (parseInt(card.dataset.cardId) === dragPayload.catId) return;
+    card.classList.add("drag-over");
   }
+  // card drag: don't stopPropagation, let grid handle
 }
 
 async function onCardDrop(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  document.querySelectorAll(".drop-indicator").forEach(el => el.remove());
-  document.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over"));
-
-  const card = e.target.closest(".card[data-card-id]");
-  if (!card || !dragPayload) return;
-  const toCatId = parseInt(card.dataset.cardId);
-
-  try {
-    if (dragType === "chip") {
-      if (toCatId === dragPayload.catId) return;
+  if (!dragPayload) return;
+  if (dragType === "chip") {
+    e.preventDefault();
+    e.stopPropagation();
+    const card = e.target.closest(".card[data-card-id]");
+    if (!card) return;
+    card.classList.remove("drag-over");
+    const toCatId = parseInt(card.dataset.cardId);
+    if (toCatId === dragPayload.catId) return;
+    try {
       await api("PUT", `/api/links/${dragPayload.linkId}/move`, { category_id: toCatId });
       await loadData();
-      return;
+    } catch (err) { alert("이동 실패: " + err.message); location.reload(); }
+    dragType = null; dragPayload = null;
+  }
+  // card drag: grid handles it
+}
+
+// Grid-level: handle card reorder with FLIP animation
+function onGridDragOver(e) {
+  if (dragType !== "card" || !dragPlaceholder) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+
+  const now = Date.now();
+  if (now - lastMoveTime < 100) return;
+  lastMoveTime = now;
+
+  const grid = document.getElementById("grid");
+  const cards = [...grid.querySelectorAll(":scope > .card[data-card-id]")]
+    .filter(c => !c.classList.contains("card-dragging"));
+
+  // Find insertion point (2D grid: row-major order)
+  let insertBefore = null;
+  for (const card of cards) {
+    const rect = card.getBoundingClientRect();
+    // Mouse is above this card's row → insert before
+    if (e.clientY < rect.top) { insertBefore = card; break; }
+    // Mouse is in this card's row → compare X
+    if (e.clientY < rect.bottom && e.clientX < rect.left + rect.width / 2) {
+      insertBefore = card; break;
     }
+  }
 
-    if (dragType === "card") {
-      if (toCatId === dragPayload.catId) return;
-      const rect = card.getBoundingClientRect();
-      const y = e.clientY - rect.top;
-      const ratio = y / rect.height;
+  // Check if placeholder is already at this position
+  const currentNext = dragPlaceholder.nextElementSibling;
+  if (insertBefore === currentNext) return;
+  if (!insertBefore && currentNext === null) return;
 
-      if (ratio >= 0.2 && ratio <= 0.8) {
-        // Nest as sub-card
-        await api("PUT", `/api/categories/${dragPayload.catId}/move`, { parent_id: toCatId });
-      } else {
-        // Reorder: compute new order
-        const visibleCards = [...document.querySelectorAll(".grid > .card[data-card-id]")];
-        const ids = visibleCards.map(c => parseInt(c.dataset.cardId)).filter(id => id !== dragPayload.catId);
-        const targetIdx = ids.indexOf(toCatId);
-        if (targetIdx < 0) return;
+  // FLIP: First
+  const firstRects = new Map();
+  cards.forEach(c => firstRects.set(c, c.getBoundingClientRect()));
 
-        if (ratio < 0.2) {
-          ids.splice(targetIdx, 0, dragPayload.catId);
-        } else {
-          ids.splice(targetIdx + 1, 0, dragPayload.catId);
-        }
-        await api("PUT", "/api/categories/reorder", { parent_id: null, ordered_ids: ids });
-      }
-      await loadData();
+  // Move placeholder
+  if (insertBefore) {
+    grid.insertBefore(dragPlaceholder, insertBefore);
+  } else {
+    grid.appendChild(dragPlaceholder);
+  }
+
+  // FLIP: Play
+  flipPlay(cards, firstRects);
+}
+
+async function onGridDrop(e) {
+  if (dragType !== "card" || !dragPlaceholder) return;
+  e.preventDefault();
+
+  const grid = document.getElementById("grid");
+  const ids = [];
+  for (const child of grid.children) {
+    if (child === dragPlaceholder) {
+      ids.push(dragPayload.catId);
+    } else if (child.dataset?.cardId && !child.classList.contains("card-dragging")) {
+      ids.push(parseInt(child.dataset.cardId));
     }
+  }
+
+  // Cleanup
+  const card = document.querySelector(".card-dragging");
+  if (card) card.classList.remove("card-dragging");
+  if (dragPlaceholder) { dragPlaceholder.remove(); dragPlaceholder = null; }
+
+  try {
+    await api("PUT", "/api/categories/reorder", { parent_id: null, ordered_ids: ids });
+    await loadData();
   } catch (err) {
-    alert("이동 실패: " + err.message);
+    alert("순서 변경 실패: " + err.message);
     location.reload();
   }
   dragType = null; dragPayload = null;
 }
 
+// FLIP animation helper
+function flipPlay(cards, firstRects) {
+  cards.forEach(card => {
+    const first = firstRects.get(card);
+    if (!first) return;
+    const last = card.getBoundingClientRect();
+    const dx = first.left - last.left;
+    const dy = first.top - last.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+    card.style.transform = `translate(${dx}px, ${dy}px)`;
+    card.style.transition = "none";
+    card.offsetHeight; // force reflow
+    card.style.transition = "transform 0.15s ease";
+    card.style.transform = "";
+    card.addEventListener("transitionend", () => { card.style.transition = ""; }, { once: true });
+  });
+}
+
 function clearDragState() {
   document.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over"));
-  document.querySelectorAll(".drop-indicator").forEach(el => el.remove());
   dragType = null;
   dragPayload = null;
 }

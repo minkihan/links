@@ -204,6 +204,7 @@ func (app *App) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name     string `json:"name"`
 		ParentID *int64 `json:"parent_id"`
+		Hidden   bool   `json:"hidden"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, 400, "잘못된 요청")
@@ -241,12 +242,16 @@ func (app *App) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
 
 	var res sql.Result
 	var err error
+	hidden := 0
+	if req.Hidden {
+		hidden = 1
+	}
 	if req.ParentID != nil {
-		res, err = app.db.Exec("INSERT INTO categories (name, parent_id, sort_order) VALUES (?, ?, ?)",
-			req.Name, *req.ParentID, sort)
+		res, err = app.db.Exec("INSERT INTO categories (name, parent_id, hidden, sort_order) VALUES (?, ?, ?, ?)",
+			req.Name, *req.ParentID, hidden, sort)
 	} else {
-		res, err = app.db.Exec("INSERT INTO categories (name, sort_order) VALUES (?, ?)",
-			req.Name, sort)
+		res, err = app.db.Exec("INSERT INTO categories (name, hidden, sort_order) VALUES (?, ?, ?)",
+			req.Name, hidden, sort)
 	}
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
