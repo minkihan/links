@@ -36,6 +36,32 @@ func validateURL(u string) bool {
 	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
 }
 
+// GET /api/events (SSE)
+func (app *App) handleSSE(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, 500, "SSE 미지원")
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	flusher.Flush()
+
+	ch := app.addSSESub()
+	defer app.removeSSESub(ch)
+
+	for {
+		select {
+		case <-ch:
+			fmt.Fprintf(w, "data: refresh\n\n")
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
 // GET /api/data
 func (app *App) handleGetData(w http.ResponseWriter, r *http.Request) {
 	tree, err := app.getTree()
@@ -78,6 +104,7 @@ func (app *App) handleCreateLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := res.LastInsertId()
+	app.broadcast()
 	writeJSON(w, 201, map[string]int64{"id": id})
 }
 
@@ -120,6 +147,7 @@ func (app *App) handleUpdateLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "링크 수정 실패")
 		return
 	}
+	app.broadcast()
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
@@ -136,6 +164,7 @@ func (app *App) handleDeleteLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "링크 삭제 실패")
 		return
 	}
+	app.broadcast()
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
@@ -161,6 +190,7 @@ func (app *App) handleMoveLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "링크 이동 실패")
 		return
 	}
+	app.broadcast()
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
@@ -196,6 +226,7 @@ func (app *App) handleReorderLinks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "커밋 실패")
 		return
 	}
+	app.broadcast()
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
@@ -263,6 +294,7 @@ func (app *App) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := res.LastInsertId()
+	app.broadcast()
 	writeJSON(w, 201, map[string]int64{"id": id})
 }
 
@@ -307,6 +339,7 @@ func (app *App) handleUpdateCategory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	app.broadcast()
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
@@ -323,6 +356,7 @@ func (app *App) handleDeleteCategory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "카테고리 삭제 실패")
 		return
 	}
+	app.broadcast()
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
@@ -369,7 +403,10 @@ func (app *App) handleMoveCategory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.ParentID != nil {
-		_, err = app.db.Exec("UPDATE categories SET parent_id=? WHERE id=?", *req.ParentID, id)
+		// 새 서브카드를 맨 뒤에 추가 (먼저 넣은 게 위)
+		var maxOrder int
+		app.db.QueryRow("SELECT COALESCE(MAX(sort_order), -1) FROM categories WHERE parent_id = ?", *req.ParentID).Scan(&maxOrder)
+		_, err = app.db.Exec("UPDATE categories SET parent_id=?, sort_order=? WHERE id=?", *req.ParentID, maxOrder+1, id)
 	} else {
 		_, err = app.db.Exec("UPDATE categories SET parent_id=NULL WHERE id=?", id)
 	}
@@ -378,6 +415,7 @@ func (app *App) handleMoveCategory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "카테고리 이동 실패")
 		return
 	}
+	app.broadcast()
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
@@ -419,6 +457,7 @@ func (app *App) handleReorderCategories(w http.ResponseWriter, r *http.Request) 
 		writeError(w, 500, "커밋 실패")
 		return
 	}
+	app.broadcast()
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }
 
@@ -437,6 +476,7 @@ func (app *App) handleImport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, fmt.Sprintf("임포트 실패: %v", err))
 		return
 	}
+	app.broadcast()
 	writeJSON(w, 200, stats)
 }
 
