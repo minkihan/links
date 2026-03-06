@@ -699,7 +699,7 @@ async function ejectSubCard(id) {
 async function nestCard(id) {
   const source = data.find(c => c.id === id);
   const isHidden = source && source.hidden;
-  const targets = data.filter(c => c.id !== id && !(c.children || []).length && c.hidden === isHidden);
+  const targets = data.filter(c => c.id !== id && !c.parent_id && c.hidden === isHidden);
   if (!targets.length) { showToast("넣을 수 있는 카테고리가 없습니다", "error"); return; }
   const result = await showPrompt({
     heading: "서브카드로 넣기",
@@ -1083,8 +1083,21 @@ document.getElementById("pm-input").addEventListener("keydown", e => {
 
 document.getElementById("search").addEventListener("keydown", handleSearchKey);
 
+// --- SSE ---
+let evtSource = null;
+function connectSSE() {
+  if (evtSource) evtSource.close();
+  evtSource = new EventSource("/api/events");
+  evtSource.onmessage = () => loadData();
+  evtSource.onerror = () => {
+    evtSource.close();
+    setTimeout(connectSSE, 5000);
+  };
+}
+
 // --- Init ---
 loadData();
+connectSSE();
 </script>
 </body>
 </html>
