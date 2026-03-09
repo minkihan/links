@@ -318,11 +318,11 @@
     </div>
     <div class="form-group">
       <label>링크 이름</label>
-      <input type="text" id="modal-title" placeholder="예: GitHub">
+      <input type="text" id="modal-title" placeholder="예: GitHub" onkeydown="if(event.key==='Enter'){event.preventDefault();saveLink();}">
     </div>
     <div class="form-group">
       <label>URL</label>
-      <input type="url" id="modal-url" placeholder="https://...">
+      <input type="url" id="modal-url" placeholder="https://..." onkeydown="if(event.key==='Enter'){event.preventDefault();saveLink();}">
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal()">취소</button>
@@ -356,6 +356,7 @@
 <script>
 let data = [];
 let unlocked = false;
+let lastCatId = null;
 const SECRET_TRIGGER = "oo";
 
 // Edit state
@@ -478,7 +479,7 @@ function renderChips(links, catId) {
     <div class="link-chip" draggable="true" data-link-id="${l.id}" data-cat-id="${catId}"
          ondragstart="onChipDragStart(event)" ondragend="onChipDragEnd(event)">
       ${favImg}
-      <a href="${escapeHtml(l.url)}" target="_blank" draggable="false">${escapeHtml(l.title)}</a>
+      <a href="${escapeHtml(l.url)}" draggable="false">${escapeHtml(l.title)}</a>
       <div class="link-actions">
         <button title="편집" onclick="event.stopPropagation(); editLink(${l.id})">&#x270E;</button>
         <button class="del" title="삭제" onclick="event.stopPropagation(); deleteLink(${l.id})">&#x2715;</button>
@@ -499,6 +500,7 @@ function renderSubCard(sub) {
         <div class="card-right">
           <button class="eject-btn" title="이름 변경" onclick="event.stopPropagation(); renameCategory(${sub.id}, '${escapeHtml(sub.name)}')">&#x270E;</button>
           <button class="eject-btn" title="꺼내기" onclick="event.stopPropagation(); ejectSubCard(${sub.id})">&#x2934;</button>
+          <button class="eject-btn" title="카드 삭제" onclick="event.stopPropagation(); deleteCategory(${sub.id}, '${escapeHtml(sub.name)}')">&#x2715;</button>
           <span class="badge">${(sub.links||[]).length}</span>
           <span class="chevron">&#x25BE;</span>
         </div>
@@ -546,6 +548,7 @@ function render(filter) {
           <div class="card-right">
             <button class="nest-btn" title="이름 변경" onclick="event.stopPropagation(); renameCategory(${cat.id}, '${escapeHtml(cat.name)}')">&#x270E;</button>
             <button class="nest-btn" title="서브카드로 넣기" onclick="event.stopPropagation(); nestCard(${cat.id})">&#x2935;</button>
+            <button class="nest-btn" title="카드 삭제" onclick="event.stopPropagation(); deleteCategory(${cat.id}, '${escapeHtml(cat.name)}')">&#x2715;</button>
             <span class="badge">${countLinks(cat)}</span>
             <span class="chevron">&#x25BE;</span>
           </div>
@@ -610,6 +613,9 @@ function openModal(linkId) {
     heading.textContent = "Add Link";
     document.getElementById("modal-title").value = "";
     document.getElementById("modal-url").value = "";
+    if (lastCatId) {
+      setTimeout(() => { document.getElementById("modal-cat").value = lastCatId; }, 0);
+    }
   }
   document.getElementById("modal").classList.add("active");
   setTimeout(() => document.getElementById("modal-title").focus(), 100);
@@ -642,6 +648,7 @@ async function saveLink() {
     } else {
       await api("POST", "/api/links", { category_id: catId, title, url });
     }
+    lastCatId = catId;
     closeModal();
     await loadData();
   } catch (e) {
@@ -715,6 +722,21 @@ async function nestCard(id) {
   } catch (e) {
     showToast("이동 실패: " + e.message, "error");
     location.reload();
+  }
+}
+
+async function deleteCategory(id, name) {
+  const cat = data.find(c => c.id === id) || data.flatMap(c => c.children || []).find(c => c.id === id);
+  const linkCount = cat ? countLinks(cat) : 0;
+  const msg = linkCount > 0
+    ? `"${name}" 카드와 링크 ${linkCount}개가 모두 삭제됩니다. 삭제하시겠습니까?`
+    : `"${name}" 카드를 삭제하시겠습니까?`;
+  if (!confirm(msg)) return;
+  try {
+    await api("DELETE", `/api/categories/${id}`);
+    await loadData();
+  } catch (e) {
+    showToast("삭제 실패: " + e.message, "error");
   }
 }
 

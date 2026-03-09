@@ -28,7 +28,8 @@ func main() {
 	}
 	defer db.Close()
 
-	app := &App{db: db}
+	app := &App{db: db, sseSubs: make(map[chan struct{}]struct{})}
+	app.exporter = newExporter(app, "docs/index.html")
 
 	mux := http.NewServeMux()
 
@@ -47,6 +48,7 @@ func main() {
 	mux.HandleFunc("POST /api/import", app.handleImport)
 	mux.HandleFunc("GET /api/export", app.handleExport)
 	mux.HandleFunc("GET /api/favicon", app.handleFavicon)
+	mux.HandleFunc("GET /api/events", app.handleSSE)
 
 	// Static files
 	subFS, _ := fs.Sub(staticFiles, "static")

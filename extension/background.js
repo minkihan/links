@@ -58,14 +58,17 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     return;
   }
   if (!info.menuItemId.startsWith("cat-")) return;
-  if (!tab.url.startsWith("http://") && !tab.url.startsWith("https://")) return;
+  // 링크 우클릭이면 링크 URL, 페이지 우클릭이면 현재 페이지 URL
+  const url = info.linkUrl || tab.url;
+  const title = info.linkUrl ? new URL(info.linkUrl).hostname : tab.title;
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return;
 
   const catId = parseInt(info.menuItemId.replace("cat-", ""));
   try {
     await api("POST", "/api/links", {
       category_id: catId,
-      title: tab.title,
-      url: tab.url
+      title,
+      url
     });
     chrome.action.setBadgeText({ text: "OK", tabId: tab.id });
     chrome.action.setBadgeBackgroundColor({ color: "#2d9a46" });

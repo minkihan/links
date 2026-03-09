@@ -7,8 +7,40 @@ import (
 )
 
 type App struct {
-	db      *sql.DB
-	reorder sync.Mutex
+	db       *sql.DB
+	reorder  sync.Mutex
+	exporter *Exporter
+
+	sseM    sync.Mutex
+	sseSubs map[chan struct{}]struct{}
+}
+
+func (app *App) addSSESub() chan struct{} {
+	ch := make(chan struct{}, 1)
+	app.sseM.Lock()
+	app.sseSubs[ch] = struct{}{}
+	app.sseM.Unlock()
+	return ch
+}
+
+func (app *App) removeSSESub(ch chan struct{}) {
+	app.sseM.Lock()
+	delete(app.sseSubs, ch)
+	app.sseM.Unlock()
+}
+
+func (app *App) broadcast() {
+	app.sseM.Lock()
+	defer app.sseM.Unlock()
+	for ch := range app.sseSubs {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+	if app.exporter != nil {
+		app.exporter.schedule()
+	}
 }
 
 type Category struct {
