@@ -13,22 +13,20 @@ echo "  OK"
 TEST_DB="test_links.db"
 rm -f "$TEST_DB" "${TEST_DB}-wal" "${TEST_DB}-shm"
 
-# 서버 시작 (테스트 DB)
-echo "[2] 서버 시작..."
-# main.go가 links.db를 하드코딩하므로 심볼릭 링크로 대체
-ln -sf "$TEST_DB" links.db
-./links &
+# 서버 시작 (테스트 DB, 테스트 포트)
+TEST_PORT=9901
+echo "[2] 서버 시작 (포트 $TEST_PORT)..."
+LINKS_DB="$TEST_DB" LINKS_ADDR="127.0.0.1:$TEST_PORT" ./links &
 SERVER_PID=$!
 sleep 1
 
 cleanup() {
   kill $SERVER_PID 2>/dev/null || true
   rm -f "$TEST_DB" "${TEST_DB}-wal" "${TEST_DB}-shm"
-  rm -f links.db links.db-wal links.db-shm
 }
 trap cleanup EXIT
 
-BASE="http://localhost:9900"
+BASE="http://localhost:$TEST_PORT"
 PASS=0
 FAIL=0
 

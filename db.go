@@ -1,8 +1,10 @@
 package main
 
 import (
+	"cmp"
 	"database/sql"
 	"fmt"
+	"slices"
 	"sync"
 )
 
@@ -174,19 +176,27 @@ func (app *App) getTree() ([]*Category, error) {
 }
 
 func sortCategories(cats []*Category) {
-	for i := 0; i < len(cats); i++ {
-		for j := i + 1; j < len(cats); j++ {
-			if cats[i].SortOrder > cats[j].SortOrder {
-				cats[i], cats[j] = cats[j], cats[i]
-			}
-		}
-	}
+	slices.SortFunc(cats, func(a, b *Category) int {
+		return cmp.Compare(a.SortOrder, b.SortOrder)
+	})
 }
 
-func (app *App) maxSortOrder(table, where string, args ...any) int {
+func (app *App) maxLinkSortOrder(categoryID int64) int {
 	var maxVal sql.NullInt64
-	q := fmt.Sprintf("SELECT MAX(sort_order) FROM %s WHERE %s", table, where)
-	app.db.QueryRow(q, args...).Scan(&maxVal)
+	app.db.QueryRow("SELECT MAX(sort_order) FROM links WHERE category_id = ?", categoryID).Scan(&maxVal)
+	if maxVal.Valid {
+		return int(maxVal.Int64) + 1000
+	}
+	return 0
+}
+
+func (app *App) maxCategorySortOrder(parentID *int64) int {
+	var maxVal sql.NullInt64
+	if parentID != nil {
+		app.db.QueryRow("SELECT MAX(sort_order) FROM categories WHERE parent_id = ?", *parentID).Scan(&maxVal)
+	} else {
+		app.db.QueryRow("SELECT MAX(sort_order) FROM categories WHERE parent_id IS NULL").Scan(&maxVal)
+	}
 	if maxVal.Valid {
 		return int(maxVal.Int64) + 1000
 	}

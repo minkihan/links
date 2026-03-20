@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
@@ -95,7 +96,7 @@ func (app *App) handleCreateLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sort := app.maxSortOrder("links", "category_id = ?", req.CategoryID)
+	sort := app.maxLinkSortOrder(req.CategoryID)
 	res, err := app.db.Exec("INSERT INTO links (category_id, title, url, sort_order) VALUES (?, ?, ?, ?)",
 		req.CategoryID, req.Title, req.URL, sort)
 	if err != nil {
@@ -182,7 +183,7 @@ func (app *App) handleMoveLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "잘못된 요청")
 		return
 	}
-	sort := app.maxSortOrder("links", "category_id = ?", req.CategoryID)
+	sort := app.maxLinkSortOrder(req.CategoryID)
 	_, err = app.db.Exec("UPDATE links SET category_id=?, sort_order=? WHERE id=?",
 		req.CategoryID, sort, id)
 	if err != nil {
@@ -261,15 +262,7 @@ func (app *App) handleCreateCategory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var where string
-	var args []any
-	if req.ParentID != nil {
-		where = "parent_id = ?"
-		args = []any{*req.ParentID}
-	} else {
-		where = "parent_id IS NULL"
-	}
-	sort := app.maxSortOrder("categories", where, args...)
+	sort := app.maxCategorySortOrder(req.ParentID)
 
 	var res sql.Result
 	var err error
@@ -516,7 +509,8 @@ func (app *App) handleFavicon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := http.Get(fmt.Sprintf("https://www.google.com/s2/favicons?domain=%s&sz=64", domain))
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("https://www.google.com/s2/favicons?domain=%s&sz=64", domain))
 	if err != nil {
 		writeError(w, 502, "favicon 가져오기 실패")
 		return

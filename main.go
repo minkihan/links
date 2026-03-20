@@ -21,7 +21,11 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
-	db, err := initDB("links.db")
+	dbPath := os.Getenv("LINKS_DB")
+	if dbPath == "" {
+		dbPath = "links.db"
+	}
+	db, err := initDB(dbPath)
 	if err != nil {
 		slog.Error("DB 초기화 실패", "error", err)
 		os.Exit(1)
@@ -54,8 +58,12 @@ func main() {
 	subFS, _ := fs.Sub(staticFiles, "static")
 	mux.Handle("/", http.FileServer(http.FS(subFS)))
 
+	addr := os.Getenv("LINKS_ADDR")
+	if addr == "" {
+		addr = "127.0.0.1:9900"
+	}
 	srv := &http.Server{
-		Addr:    "127.0.0.1:9900",
+		Addr:    addr,
 		Handler: mux,
 	}
 
