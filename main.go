@@ -32,7 +32,21 @@ func main() {
 	}
 	defer db.Close()
 
-	app := &App{db: db, sseSubs: make(map[chan struct{}]struct{})}
+	addr := os.Getenv("LINKS_ADDR")
+	if addr == "" {
+		addr = "127.0.0.1:9900"
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		slog.Warn("홈 디렉토리 조회 실패, 로컬 파일 서빙 비활성화", "error", err)
+	}
+
+	app := &App{
+		db:        db,
+		home:      home,
+		localBase: "http://" + addr,
+		sseSubs:   make(map[chan struct{}]struct{}),
+	}
 	app.exporter = newExporter(app, "docs/index.html")
 
 	mux := http.NewServeMux()
@@ -54,14 +68,15 @@ func main() {
 	mux.HandleFunc("GET /api/favicon", app.handleFavicon)
 	mux.HandleFunc("GET /api/events", app.handleSSE)
 
+	// 로컬 파일 서빙 (file:// 링크를 브라우저가 열 수 있도록 http로 중계)
+	if home != "" {
+		mux.Handle("GET /local/", http.StripPrefix("/local/", app.localFileServer()))
+	}
+
 	// Static files
 	subFS, _ := fs.Sub(staticFiles, "static")
 	mux.Handle("/", http.FileServer(http.FS(subFS)))
 
-	addr := os.Getenv("LINKS_ADDR")
-	if addr == "" {
-		addr = "127.0.0.1:9900"
-	}
 	srv := &http.Server{
 		Addr:    addr,
 		Handler: mux,

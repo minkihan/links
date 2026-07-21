@@ -262,10 +262,15 @@ func writeLinksGrid(b *strings.Builder, links []*Link) {
 		b.WriteString(`<a class="link-chip" href="`)
 		b.WriteString(htmlEsc(l.URL))
 		b.WriteString(`">
-  <img src="https://www.google.com/s2/favicons?sz=32&domain=`)
-		b.WriteString(htmlEsc(d))
-		b.WriteString(`" alt="">
-  <span>`)
+`)
+		// 로컬 링크는 외부 favicon을 가져올 수 없으므로 아이콘을 생략한다
+		if d != "" && d != "localhost" && d != "127.0.0.1" {
+			b.WriteString(`  <img src="https://www.google.com/s2/favicons?sz=32&domain=`)
+			b.WriteString(htmlEsc(d))
+			b.WriteString(`" alt="">
+`)
+		}
+		b.WriteString(`  <span>`)
 		b.WriteString(htmlEsc(l.Title))
 		b.WriteString(`</span>
 </a>

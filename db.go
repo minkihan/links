@@ -13,6 +13,9 @@ type App struct {
 	reorder  sync.Mutex
 	exporter *Exporter
 
+	home      string // 로컬 파일 서빙 루트 (홈 디렉토리)
+	localBase string // file:// 변환 시 사용할 서버 주소 (예: http://127.0.0.1:9900)
+
 	sseM    sync.Mutex
 	sseSubs map[chan struct{}]struct{}
 }

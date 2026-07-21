@@ -8,7 +8,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -35,6 +37,51 @@ func sanitizeText(s string, maxLen int) string {
 
 func validateURL(u string) bool {
 	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
+}
+
+// normalizeURL은 file:// 경로를 /local/ 서빙 URL로 변환한다.
+// 브라우저는 http 페이지에서 file:// 링크 열기를 차단하므로 저장 시점에 바꿔둔다.
+func (app *App) normalizeURL(raw string) (string, error) {
+	if !strings.HasPrefix(raw, "file://") {
+		return raw, nil
+	}
+	if app.home == "" {
+		return "", fmt.Errorf("로컬 파일 서빙이 비활성화되어 있습니다")
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("잘못된 file:// 경로입니다")
+	}
+	if u.Host != "" && u.Host != "localhost" {
+		return "", fmt.Errorf("다른 호스트의 file:// 경로는 지원하지 않습니다")
+	}
+
+	rel, err := filepath.Rel(app.home, filepath.Clean(u.Path))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("홈 디렉토리 밖의 파일은 추가할 수 없습니다")
+	}
+
+	segs := strings.Split(filepath.ToSlash(rel), "/")
+	for i, s := range segs {
+		segs[i] = url.PathEscape(s)
+	}
+	return app.localBase + "/local/" + strings.Join(segs, "/"), nil
+}
+
+// GET /local/{경로} — 홈 디렉토리 하위 파일을 http로 중계한다.
+// 디렉토리 리스팅은 노출하지 않는다 (index.html이 있을 때만 서빙).
+func (app *App) localFileServer() http.Handler {
+	files := http.FileServer(http.Dir(app.home))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		full := filepath.Join(app.home, filepath.FromSlash(path.Clean("/"+r.URL.Path)))
+		if info, err := os.Stat(full); err == nil && info.IsDir() {
+			if _, err := os.Stat(filepath.Join(full, "index.html")); err != nil {
+				http.NotFound(w, r)
+				return
+			}
+		}
+		files.ServeHTTP(w, r)
+	})
 }
 
 // GET /api/events (SSE)
@@ -91,8 +138,14 @@ func (app *App) handleCreateLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "제목과 URL은 필수입니다")
 		return
 	}
+	normalized, err := app.normalizeURL(req.URL)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	req.URL = normalized
 	if !validateURL(req.URL) {
-		writeError(w, 400, "URL은 http:// 또는 https://로 시작해야 합니다")
+		writeError(w, 400, "URL은 http://, https:// 또는 file://로 시작해야 합니다")
 		return
 	}
 
@@ -131,8 +184,14 @@ func (app *App) handleUpdateLink(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "제목과 URL은 필수입니다")
 		return
 	}
+	normalized, err := app.normalizeURL(req.URL)
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	req.URL = normalized
 	if !validateURL(req.URL) {
-		writeError(w, 400, "URL은 http:// 또는 https://로 시작해야 합니다")
+		writeError(w, 400, "URL은 http://, https:// 또는 file://로 시작해야 합니다")
 		return
 	}
 

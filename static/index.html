@@ -322,7 +322,7 @@
     </div>
     <div class="form-group">
       <label>URL</label>
-      <input type="url" id="modal-url" placeholder="https://..." onkeydown="if(event.key==='Enter'){event.preventDefault();saveLink();}">
+      <input type="text" id="modal-url" placeholder="https://... 또는 file:///..." onkeydown="if(event.key==='Enter'){event.preventDefault();saveLink();}">
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeModal()">취소</button>
@@ -373,7 +373,7 @@ function showToast(msg, type) {
     toast.style.opacity = "0";
     toast.style.transition = "opacity 0.3s";
     setTimeout(() => toast.remove(), 300);
-  }, 3000);
+  }, type === "error" ? 6000 : 3000);
 }
 
 // --- Prompt Modal (promise-based) ---
@@ -461,6 +461,8 @@ function countLinks(cat) {
 function faviconUrl(url) {
   try {
     const host = new URL(url).hostname;
+    // 로컬 링크는 외부 favicon을 가져올 수 없으므로 아이콘을 생략한다
+    if (!host || host === "localhost" || host === "127.0.0.1") return "";
     return "/api/favicon?domain=" + encodeURIComponent(host);
   } catch { return ""; }
 }
@@ -653,7 +655,7 @@ async function saveLink() {
     await loadData();
   } catch (e) {
     showToast("저장 실패: " + e.message, "error");
-    location.reload();
+    await loadData();
   }
 }
 
@@ -667,7 +669,7 @@ async function deleteLink(id) {
     await loadData();
   } catch (e) {
     showToast("삭제 실패: " + e.message, "error");
-    location.reload();
+    await loadData();
   }
 }
 
@@ -699,7 +701,7 @@ async function ejectSubCard(id) {
     await loadData();
   } catch (e) {
     showToast("꺼내기 실패: " + e.message, "error");
-    location.reload();
+    await loadData();
   }
 }
 
@@ -721,7 +723,7 @@ async function nestCard(id) {
     await loadData();
   } catch (e) {
     showToast("이동 실패: " + e.message, "error");
-    location.reload();
+    await loadData();
   }
 }
 
@@ -875,7 +877,7 @@ async function onChipBodyDrop(e, catId) {
     await loadData();
   } catch (err) {
     showToast("순서 변경 실패: " + err.message, "error");
-    location.reload();
+    await loadData();
   }
   clearDragState();
 }
@@ -917,7 +919,7 @@ async function onDrop(e) {
     await loadData();
   } catch (e) {
     showToast("이동 실패: " + e.message, "error");
-    location.reload();
+    await loadData();
   }
   dragType = null; dragPayload = null;
 }
@@ -987,7 +989,7 @@ async function onCardDrop(e) {
       await loadData();
     } catch (err) {
       showToast("이동 실패: " + err.message, "error");
-      location.reload();
+      await loadData();
     }
     dragType = null; dragPayload = null;
   }
@@ -1055,7 +1057,7 @@ async function onGridDrop(e) {
     await loadData();
   } catch (err) {
     showToast("순서 변경 실패: " + err.message, "error");
-    location.reload();
+    await loadData();
   }
   dragType = null; dragPayload = null;
 }
