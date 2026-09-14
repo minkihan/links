@@ -3,3 +3,6 @@ links.db-wal
 links.db-shm
 links
 favicons/
+
+# 자동 백업본 (links.db.bak-YYYYMMDD-HHMMSS)
+links.db.bak-*
