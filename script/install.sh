@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-PROJECT_DIR="/Users/minkihan/Documents/coda/__sub/2026-03-links"
+PROJECT_DIR="/Users/minkihan/Documents/coda/2026-03-links"
 PLIST_NAME="com.coda.links"
 PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_NAME}.plist"
 BINARY="$PROJECT_DIR/links"
